@@ -26,7 +26,7 @@ use stm32f1xx_hal::{
 static mut RX: Option<Rx<USART3>> = None;
 static mut TX: Option<Tx<USART3>> = None;
 #[entry]
-unsafe fn main() -> ! {
+fn main() -> ! {
     // Get access to the device specific peripherals from the peripheral access crate
     let p = pac::Peripherals::take().unwrap();
 
@@ -45,39 +45,6 @@ unsafe fn main() -> ! {
     // Prepare the GPIOB peripheral
     let mut gpiob = p.GPIOB.split();
 
-    // let scl = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
-    // let sda = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
-
-
-
-    // let i2c = BlockingI2c::i2c1(
-    //     p.I2C1,
-    //     (scl, sda),
-    //     &mut afio.mapr,
-    //     Mode::Fast {
-    //         frequency: 400_000.Hz(),
-    //         duty_cycle: DutyCycle::Ratio2to1,
-    //     },
-    //     clocks,
-    //     1000,
-    //     10,
-    //     1000,
-    //     1000,
-    // );
-
-    // let interface = I2CDisplayInterface::new(i2c);
-    // let mut display = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate180)
-    //     .into_buffered_graphics_mode();
-    
-    //     let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("/home/leonid/CalibreLibrary/Rust/embeded/pics/bad_apple_is/output_/opt-bad_apple_6280.bin"), 43);
-
-    //     let im = Image::new(&raw, Point::new(43, 0));
-    
-    //     im.draw(&mut display).unwrap();
-    
-    //     display.flush().unwrap();
-
-
     // USART3
     let tx = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
     let rx = gpiob.pb11;
@@ -93,7 +60,6 @@ unsafe fn main() -> ! {
     cortex_m::interrupt::free(|_| unsafe {
         TX.replace(tx);
         RX.replace(rx);
-       
     });
     unsafe {
         cortex_m::peripheral::NVIC::unmask(pac::Interrupt::USART3);
@@ -101,28 +67,18 @@ unsafe fn main() -> ! {
 
     loop {
         cortex_m::asm::wfi()
-        
     }
-    
 }
 const BUFFER_LEN: usize = 256;
 static mut BUFFER: &mut [u8; BUFFER_LEN] = &mut [0; BUFFER_LEN];
 static mut WIDX: usize = 0;
 
-
-
-
-
 unsafe fn write(buf: &[u8]) {
     if let Some(tx) = TX.as_mut() {
         buf.iter()
             .for_each(|w| if let Err(_err) = nb::block!(tx.write(*w)) {})
-    }    
-    
+    }
 }
-
-
-
 #[interrupt]
 unsafe fn USART3() {
     cortex_m::interrupt::free(|_| {
@@ -145,4 +101,3 @@ unsafe fn USART3() {
         }
     })
 }
-
