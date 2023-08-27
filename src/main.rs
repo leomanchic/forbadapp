@@ -13,8 +13,10 @@ use embedded_graphics::{
     image::{Image, ImageRaw},
     pixelcolor::BinaryColor,
     prelude::*,
+    Drawable,
 };
 use stm32f1xx_hal::{
+    gpio,
     pac,
     pac::interrupt,
     pac::USART3,
@@ -25,6 +27,11 @@ use stm32f1xx_hal::{
 
 static mut RX: Option<Rx<USART3>> = None;
 static mut TX: Option<Tx<USART3>> = None;
+static mut SCL: Option<stm32f1xx_hal::gpio::gpiob::PB8<stm32f1xx_hal::gpio::Alternate<stm32f1xx_hal::gpio::OpenDrain>>> = None;
+static mut SDA: Option<stm32f1xx_hal::gpio::gpiob::PB9<stm32f1xx_hal::gpio::Alternate<stm32f1xx_hal::gpio::OpenDrain>>> = None;
+static mut DISPLAY: Option<Ssd1306<I2CInterface<BlockingI2c<pac::I2C1, (gpio::Pin<'B', 8, gpio::Alternate<gpio::OpenDrain>>, gpio::Pin<'B', 9, gpio::Alternate<gpio::OpenDrain>>)>>, DisplaySize128x32, ssd1306::mode::BufferedGraphicsMode<DisplaySize128x32>>> = None;
+
+
 #[entry]
 unsafe fn main() -> ! {
     // Get access to the device specific peripherals from the peripheral access crate
@@ -42,42 +49,33 @@ unsafe fn main() -> ! {
     // Prepare the alternate function I/O registers
     let mut afio = p.AFIO.constrain();
 
-    // Prepare the GPIOB peripheral
+    // Prepare the GPIOB peripheralgoogle_images_download
     let mut gpiob = p.GPIOB.split();
 
-    // let scl = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
-    // let sda = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
+    let  scl = gpiob.pb8.into_alternate_open_drain(&mut gpiob.crh);
+    let  sda = gpiob.pb9.into_alternate_open_drain(&mut gpiob.crh);
 
 
 
-    // let i2c = BlockingI2c::i2c1(
-    //     p.I2C1,
-    //     (scl, sda),
-    //     &mut afio.mapr,
-    //     Mode::Fast {
-    //         frequency: 400_000.Hz(),
-    //         duty_cycle: DutyCycle::Ratio2to1,
-    //     },
-    //     clocks,
-    //     1000,
-    //     10,
-    //     1000,
-    //     1000,
-    // );
+    let i2c = BlockingI2c::i2c1(
+        p.I2C1,
+        (scl, sda),
+        &mut afio.mapr,
+        Mode::Fast {
+            frequency: 400_000.Hz(),
+            duty_cycle: DutyCycle::Ratio2to1,
+        },
+        clocks,
+        1000,
+        10,
+        1000,
+        1000,google_images_download
+    );
 
-    // let interface = I2CDisplayInterface::new(i2c);
-    // let mut display = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate180)
-    //     .into_buffered_graphics_mode();
     
-    //     let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("/home/leonid/CalibreLibrary/Rust/embeded/pics/bad_apple_is/output_/opt-bad_apple_6280.bin"), 43);
-
-    //     let im = Image::new(&raw, Point::new(43, 0));
-    
-    //     im.draw(&mut display).unwrap();
-    
-    //     display.flush().unwrap();
-
-
+    let interface = I2CDisplayInterface::new(i2c);
+    let  mut display: Ssd1306<I2CInterface<BlockingI2c<pac::I2C1, (gpio::Pin<'B', 8, gpio::Alternate<gpio::OpenDrain>>, gpio::Pin<'B', 9, gpio::Alternate<gpio::OpenDrain>>)>>, DisplaySize128x32, ssd1306::mode::BufferedGraphicsMode<DisplaySize128x32>> = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate180)
+    .into_buffered_graphics_mode();
     // USART3
     let tx = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
     let rx = gpiob.pb11;
@@ -93,6 +91,9 @@ unsafe fn main() -> ! {
     cortex_m::interrupt::free(|_| unsafe {
         TX.replace(tx);
         RX.replace(rx);
+        SCL.replace(scl);
+        SDA.replace(sda);
+        DISPLAY.replace(display);
        
     });
     unsafe {
@@ -134,6 +135,13 @@ unsafe fn USART3() {
                     if WIDX >= BUFFER_LEN - 1 {
                         write(&BUFFER[..]);
                         WIDX = 0;
+                       
+                        let raw: ImageRaw<BinaryColor> = ImageRaw::new(BUFFER, 43);
+                        let im = Image::new(&raw, Point::new(43, 0));
+                        im.draw(&mut DISPLAY).unwrap();
+                        DISPLAY.expect("REASON").flush().unwrap()
+
+                        
                     }
                 }
                 rx.listen_idle();
